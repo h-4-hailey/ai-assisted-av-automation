@@ -1,31 +1,58 @@
-# AI-Assisted AV Automation
+// Cisco RoomOS Macro - AI-Assisted BRB / Auto Disconnect Workflow
+// Concept: Automatically disconnect active calls if room becomes vacant
+// after a defined timeout period to improve meeting confidentiality.
 
-This repository contains concepts and workflow automation ideas exploring how AI can improve operational efficiency, user experience, and confidentiality within enterprise AV and collaboration environments.
+const xapi = require('xapi');
 
-## Example: Cisco RoomOS Confidentiality Automation
+const VACANT_TIMEOUT = 300000; // 5 minutes in milliseconds
+let vacancyTimer = null;
 
-One automation concept leverages Cisco RoomOS occupancy analytics to improve meeting confidentiality.
+// Listen for room occupancy status
+xapi.Status.RoomAnalytics.PeoplePresence.on((status) => {
+  
+  console.log(`Room Presence Status: ${status}`);
 
-### Concept
-If a meeting room becomes vacant for a defined period of time while an active call is still connected, the system can automatically disconnect the call to reduce the risk of unintended audio exposure in shared corporate environments.
+  if (status === 'No') {
 
-### Technologies
-- Cisco RoomOS
-- JavaScript Macros
-- Occupancy Sensors
-- AI-Assisted Scripting Workflow
+    console.log('Room vacant detected. Starting timeout countdown...');
 
-### Objectives
-- Improve meeting confidentiality
-- Reduce human error
-- Enhance operational efficiency
-- Automate repetitive workflows
+    vacancyTimer = setTimeout(async () => {
 
-## AI Usage
+      try {
+        // Check active calls
+        const calls = await xapi.Status.Call.get();
 
-AI tools were leveraged to:
-- Generate scripting concepts
-- Accelerate troubleshooting
-- Draft technical documentation
-- Explore workflow automation opportunities
-- Improve operational efficiency in AV support environments
+        if (calls.length > 0) {
+
+          console.log('No occupancy detected. Disconnecting active calls for confidentiality.');
+
+          // Disconnect all active calls
+          for (const call of calls) {
+            await xapi.Command.Call.Disconnect({ CallId: call.id });
+          }
+
+          // Optional: Display notification on room device
+          await xapi.Command.UserInterface.Message.Alert.Display({
+            Title: 'Meeting Ended',
+            Text: 'Call disconnected automatically due to room vacancy.',
+            Duration: 10
+          });
+        }
+
+      } catch (error) {
+        console.error(`Error disconnecting call: ${error}`);
+      }
+
+    }, VACANT_TIMEOUT);
+
+  } else {
+
+    console.log('Occupancy detected. Cancelling disconnect timer.');
+
+    // Cancel timeout if someone re-enters room
+    if (vacancyTimer) {
+      clearTimeout(vacancyTimer);
+      vacancyTimer = null;
+    }
+  }
+});
